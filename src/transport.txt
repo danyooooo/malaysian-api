@@ -1,0 +1,41 @@
+https://api.dani-dev.co.za/v2/transport
+
+GET /rapidkl/stations
+GET /rapidkl/fare
+  Query:
+    from: <string> (required)
+    to: <string> (required)
+GET /rapidkl/geocode
+  Query:
+    input: <string> (required)
+    scope: <string>
+    agency: <string>
+GET/POST /rapidkl/journey
+  Query:
+    flat: <decimal> (required)
+    flng: <decimal> (required)
+    tlat: <decimal> (required)
+    tlng: <decimal> (required)
+    agency: <string>
+    mode: <string>
+    route_type: [CHEAPEST, FASTEST, LEAST_TRANSIT]
+    departure_datetime: <YYYY-MM-DD HH:mm:ss>
+GET /rapidkl/announcements
+  Query:
+    maxposts: <integer>
+
+GET /rapidkl/data/bus_routes
+GET /rapidkl/data/transit_polylines
+GET /rapidkl/data/transit_schematic_stations
+
+GET /ktmb/session
+GET /ktmb/stations
+GET/POST /ktmb/timetable
+  Query:
+    fromId: <string> (required)
+    toId: <string> (required)
+    onwardDate: <YYYY-MM-DD>
+    onwardTime: <HH:mm>
+    isNow: [true, false]
+    fromData: <string>
+    toData: <string>

@@ -1,0 +1,148 @@
+https://api.dani-dev.co.za/v1/stream
+
+GET /health
+
+GET /index.m3u
+GET /index.m3u8
+GET /playlist.m3u
+  Query:
+    type: [video, tv, audio, radio]
+    provider: [mytv, rtmklik, tonton, syokmy, audioplus, tvs]
+
+GET /tonton/epg
+GET /epg.xml
+GET /epg.xml.gz
+GET /epg
+  Query:
+    provider: [mytv, manamana, rtmklik, rtm, tonton, mediaprima, tvs, tvsplus, tvsarawak] (required)
+    date: <YYYY-MM-DD>
+    dateStart: <YYYY-MM-DD>
+    channelType: [video, audio]
+    refresh: [true, false]
+GET /rtmklik/epg
+GET /rtm/epg
+  Query:
+    dateStart: <YYYY-MM-DD>
+    date: <YYYY-MM-DD>
+GET /mytv/epg
+  Query:
+    channelType: [video, audio]
+    date: <YYYY-MM-DD>
+
+GET /radio-stations
+GET /tv-stations
+
+GET /radio-metadata
+  Query:
+    station: <string> (required)
+    songhistory: [true, false, 1, 0, yes, no]
+
+GET /news-filter
+  Query:
+    provider: [rtmklik, tonton]
+GET /news
+  Query:
+    provider: [rtmklik, tonton] (required)
+    filter: <string>
+    limit: <integer>
+
+GET /tonton/embed/{slugOrId}
+  Path:
+    slugOrId: [tv3, 8tv, tv9, didiktv, dramasangat, <assetId>]
+GET /tonton/live/{slugOrId}
+  Path:
+    slugOrId: [tv3, 8tv, tv9, didiktv, dramasangat, <assetId>]
+  Query:
+    json: [true, false]
+    format: [json]
+    nocache: [true, false]
+GET /tonton/https/{targetPath}
+  Path:
+    targetPath: <url>
+
+GET /syokmy/embed/{slug}
+GET /syok/embed/{slug}
+GET /syokmy/live/{slug}
+GET /syok/live/{slug}
+GET /syokmy/https/{targetPath}
+GET /syok/https/{targetPath}
+  Path:
+    targetPath: <url>
+GET /syokmy/podcasts
+GET /syok/podcasts
+  Query:
+    page: <integer>
+
+GET /rtmklik/embed/{slug}
+GET /rtm/embed/{slug}
+  Path:
+    slug: <string>
+GET /rtmklik/live/{slug}
+GET /rtm/live/{slug}
+  Path:
+    slug: <string>
+  Query:
+    json: [true, false]
+    redirect: [true, false]
+    quality: [smil, 1080]
+GET /rtmklik/https/{targetPath}
+GET /rtm/https/{targetPath}
+  Path:
+    targetPath: <url>
+
+GET /mytv/embed/{slugOrId}
+  Path:
+    slugOrId: <string>
+GET /mytv/live/{slugOrId}
+  Path:
+    slugOrId: <string>
+  Query:
+    json: [true, false]
+    format: [json]
+    redirect: [true, false]
+    quality: [1080p, 720p, 480p]
+GET /mytv/https/{targetPath}
+  Path:
+    targetPath: <url>
+
+GET /audioplus/embed/{slug}
+  Path:
+    slug: <string>
+GET /audioplus/live/{slug}
+  Path:
+    slug: <string>
+  Query:
+    json: [true, false]
+GET /audioplus/https/{targetPath}
+  Path:
+    targetPath: <url>
+GET /audioplus/history
+  Query:
+    domain: <string>
+
+GET /tvs/embed/{slug}
+GET /tvsplus/embed/{slug}
+GET /tvsarawak/embed/{slug}
+  Path:
+    slug: [tvs, tvsplus]
+GET /tvs/live/{slug}
+GET /tvsplus/live/{slug}
+GET /tvsarawak/live/{slug}
+  Path:
+    slug: [tvs, tvsplus]
+  Query:
+    json: [true, false]
+    format: [json]
+    source: [website, backup]
+    redirect: [true, false]
+    quality: [1080p, 720p, 480p]
+GET /tvs/https/{targetPath}
+GET /tvsplus/https/{targetPath}
+GET /tvsarawak/https/{targetPath}
+  Path:
+    targetPath: <url>
+
+GET /embed/{slug}
+GET /player/{slug}
+  Path:
+    slug: <string>

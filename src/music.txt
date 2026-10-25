@@ -1,0 +1,68 @@
+https://api.dani-dev.co.za/v2/music
+
+GET /lyrics
+GET /lyric
+  Query:
+    slug / songSlug: <string>
+    q / query / track / all: <string>
+    trackid / id / lfid: <string>
+    artist: <string>
+    country / territory: <two-letter country code> (default: US)
+  Notes:
+    Provide a slug, track ID, or song query to retrieve lyrics.
+    The base URL serves the endpoint reference when no song parameter is supplied.
+
+GET /search
+  Query:
+    query / all: <string> (required)
+    searchtype / type: [track, artist, album] (default: track)
+    country / territory: <two-letter country code> (default: US)
+    limit: <integer, 1-100> (default: 10)
+    offset: <integer, 0-10000> (default: 0)
+
+GET /metadata
+GET /track
+  Query:
+    reqtype: [artistdata, artistalbums, albumdata, listgenres, listlanguages] (default: artistdata)
+    artistid: <string>
+    albumid: <string>
+    trackid / id: <string>
+    letter: <string>
+    artist: <string>
+    album: <string>
+    country / territory: <two-letter country code> (default: US)
+    limit: <integer, 1-100> (default: 10)
+    offset: <integer, 0-10000> (default: 0)
+  Notes:
+    Supply identifiers appropriate to the selected reqtype.
+    artist and album provide optional name hints for artistdata and albumdata fallback.
+
+GET /translation
+  Query:
+    slug / trackid / lfid: <string> (one required)
+    lang / translationlanguage / translation_language: <language code> (required)
+    country / territory: <two-letter country code> (default: US)
+
+GET /charts
+  Query:
+    reqtype: [trackcharts, artistcharts] (default: trackcharts)
+    genre: <string>
+    artistid: <string>
+    country / territory: <two-letter country code> (default: US)
+    limit: <integer, 1-100> (default: 10)
+    offset: <integer, 0-10000> (default: 0)
+
+GET /lyriciq
+  Query:
+    slug / trackid: <string> (one required)
+    country / territory: <two-letter country code> (default: US)
+
+OPTIONS /*
+  Notes:
+    CORS preflight is supported on every path and returns HTTP 204.
+    Allowed methods: [GET, OPTIONS]
+    Allowed request headers: [Content-Type]
+
+Notes:
+  No client token is required.
+  Parameter names separated by / are aliases; supply one name from each group.

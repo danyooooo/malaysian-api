@@ -146,3 +146,503 @@ GET /embed/{slug}
 GET /player/{slug}
   Path:
     slug: <string>
+
+https://api.dani-dev.co.za/v2/stream
+
+# RadioMY stream API endpoint reference
+# Updated: 2026-10-25 (Asia/Kuala_Lumpur)
+# Source: src/router.js and its handlers in the RadioMY-cf-v2 project.
+# Routes below are relative to the base URL above unless marked root-only.
+# The same routes support no prefix or a custom prefix before
+# a recognized route target. Provider aliases are specific to each section.
+# Methods shown are the intended client methods; most GET routes do not
+# enforce methods. OPTIONS on any path returns 204 with CORS headers.
+# This is a source inventory; upstream playback availability can vary.
+
+GET /health
+GET https://api.dani-dev.co.za/ (root-only health check)
+  Response: text/plain; API is online!
+
+OPTIONS /{path}
+  Response: 204; CORS preflight (handled before maintenance and routing).
+
+GET /index.m3u
+GET /index.m3u8
+GET /playlist.m3u
+  Query:
+    type: [video, tv, audio, radio] (optional; defaults to all)
+    provider: [mytv, rtmklik, tonton, syokmy, audioplus, tvs, sooka] (optional)
+  Response: IPTV M3U playlist with XMLTV URL and per-stream request headers.
+  Notes: provider filtering uses canonical names, not EPG/provider aliases.
+    Hidden and excluded registry entries are omitted.
+
+GET /epg.xml
+GET /epg.xml.gz
+  Query:
+    refresh: [true, false] (default: false)
+  Response: XMLTV XML or a gzip archive, respectively.
+  Sources: mytv, tonton, rtmklik, tvs, astro, unifi; Sooka is JSON-only.
+
+GET /epg
+GET /mytv/epg
+GET /manamana/epg
+GET /rtmklik/epg
+GET /rtm/epg
+GET /tonton/epg
+GET /mediaprima/epg
+GET /tvs/epg
+GET /tvsplus/epg
+GET /tvsarawak/epg
+GET /astro/epg
+GET /unifi/epg
+GET /unifitv/epg
+GET /sooka/epg
+  Query (shared by all JSON EPG routes):
+    provider: [mytv, manamana, rtmklik, rtm, tonton, mediaprima, tvs,
+      tvsplus, tvsarawak, astro, unifi, unifitv, sooka]
+      Optional when provided in the route or inferred from channel/date.
+      An explicit provider in the route overrides the query parameter.
+    channel: <canonical provider:slug, slug, alias, upstream ID, name, or channel number>
+    slug: <channel selector> (alias; used if channel is absent)
+    stbNumber: <channel selector> (alias; used if channel and slug are absent)
+    date: <YYYY-MM-DD or YYYYMMDD> (default: Malaysia today)
+    dateStart: <date> (alias; used if date is absent)
+    day: <date> (alias; used if date and dateStart are absent)
+    channelType: [video, audio]
+    search: <string>
+    q: <string> (alias; used if search is absent)
+    category: <string>
+    refresh: [true, false] (default: false)
+  Response: {ok, provider, date, timezone, mode, totalChannels, channels[]}.
+    No channel: summary mode. Selected channel: one channel with schedule[].
+    channel/slug/stbNumber and date/dateStart/day use the precedence above.
+    Unknown or ambiguous channel selectors are rejected; no substring guessing.
+    Without provider, a recognized channel can infer the provider; date-only
+    requests default to Unifi. No provider, channel, or date returns 400.
+    Syok podcasts are separate and are not an EPG provider.
+
+GET /radio-stations
+GET /tv-stations
+  Response: station array with title, slug, image, provider, category, type.
+  Notes: use returned provider + slug with the live/embed routes below.
+    Hidden and excluded entries are omitted; aliases may exist in registries.
+
+GET /radio-metadata
+  Query:
+    station: <station slug or alias> (required)
+    songhistory: [true, false, 1, 0, yes, no] (default: false)
+  Response: now-playing metadata and optional recently played history.
+  Notes: true/1/yes enable history; other values disable it.
+    A supported station may have unavailable metadata or no song history.
+
+GET /news-filter
+  Query:
+    provider: [rtmklik, rtm, tonton, mediaprima] (optional)
+  Response: provider filters, or a directory of all providers if omitted.
+
+GET /news
+  Query:
+    provider: [rtmklik, rtm, tonton, mediaprima] (required)
+    filter: <filter ID from /news-filter> (optional; omitted = full dashboard)
+    limit: <positive integer> (optional; maximum items per catalogue)
+  Filters:
+    rtmklik: [fifa-match-replay, sports-highlights, trending, exclusives,
+      upcoming, brand-new, drama, movie-telemovie, entertainment]
+    tonton: [most-watched-shows, most-watched-movies]
+
+# Tonton
+
+GET /tonton/embed/{slugOrId}
+  Path:
+    slugOrId: [tv3, 8tv, tv9, didiktv, ntv7, dramasangat, <assetId>]
+  Query:
+    type: [audio, video] (optional player selection)
+    player: [audio, video] (alias; used if type is absent)
+    Live query parameters are forwarded to the player's playback request.
+  Default when slugOrId is omitted: tv3.
+
+GET /tonton/live/{slugOrId}
+  Path:
+    slugOrId: [tv3, 8tv, tv9, didiktv, ntv7, dramasangat, <assetId>]
+  Query:
+    json: [true, false]
+    format: [json]
+    nocache: [true, false] (default: false)
+    device: <device ID> (optional; use together with token)
+    token: <login token> (optional; use together with device)
+  Response: JSON when requested, otherwise 307 redirect to the stream.
+  Default when slugOrId is omitted: 6420323 (TV3).
+  Notes: thrill/6522423 and fifaplus/6576795 are explicitly disabled (403).
+
+GET /tonton/auth/test
+  Query:
+    device: <device ID> (optional; use together with token)
+    token: <login token> (optional; use together with device)
+  Response: authentication/playback diagnostic JSON; may renew credentials.
+
+# Syok / Astro Awani
+
+GET /syokmy/embed/{slug}
+GET /syok/embed/{slug}
+  Path:
+    slug: <registered Syok station slug or alias, including astro-awani>
+  Query:
+    type: [audio, video]
+    player: [audio, video] (alias; used if type is absent)
+    Live query parameters are forwarded to the player's playback request.
+  Default when slug is omitted: astro-awani.
+
+GET /syokmy/live/{slug}
+GET /syok/live/{slug}
+  Path:
+    slug: <registered Syok station slug or alias, including astro-awani>
+  Query:
+    json: [true, false]
+    format: [json]
+    source: <substring of a configured source provider or label>
+    stream: <source selector> (alias; used if source is absent)
+  Response: JSON when requested, otherwise 307 redirect.
+  Notes: source selection applies to channels with multiple streams.
+  Default when slug is omitted: astro-awani.
+
+GET /syokmy/podcasts
+GET /syok/podcasts
+  Query:
+    page: <integer> (default: 1)
+  Response: Syok podcast catalogue (12 shows per page).
+
+# RTMKlik
+
+GET /rtmklik/embed/{slug}
+GET /rtm/embed/{slug}
+  Path:
+    slug: <registered RTM TV/radio slug or alias>
+  Query:
+    type: [audio, video]
+    player: [audio, video] (alias; used if type is absent)
+    Live query parameters are forwarded for rendered players.
+  Response: TV entries in category RtmTv redirect to /rtmklik/live/{slug}?json=true;
+    other entries render an HTML player.
+  Default when slug is omitted: tv1.
+
+GET /rtmklik/live/{slug}
+GET /rtm/live/{slug}
+  Path:
+    slug: <registered RTM TV/radio slug or alias>
+  Query:
+    json: [true, false]
+    redirect: [true, false]
+    quality: [smil, 1080] (selects a matching configured stream)
+  Response: RTM TV defaults to JSON; redirect=true requests a 307 redirect.
+    json=true takes precedence over redirect=true. Radio defaults to a redirect.
+  Default when slug is omitted: tv1.
+
+# MYTV ManaMana
+
+GET /mytv/embed/{slugOrId}
+  Path:
+    slugOrId: <registered MYTV slug, alias, or channel ID>
+  Query:
+    type: [audio, video]
+    player: [audio, video] (alias; used if type is absent)
+    Live query parameters are forwarded to the player's playback request.
+  Default when slugOrId is omitted: tv5.
+
+GET /mytv/live/{slugOrId}
+  Path:
+    slugOrId: <registered MYTV slug, alias, or channel ID>
+  Query:
+    json: [true, false]
+    format: [json]
+    redirect: [true, false]
+    quality: [1080p, 720p, 480p] (signed TV variant when redirect=true)
+    source: [mytv, proxy, website, backup] (Glue-backed channels only)
+  Response: signed HLS master, JSON, or 307 redirect, depending on channel/query.
+    Protected channels return DRM playback JSON unless redirect=true.
+    MYTV radio JSON uses a proxy URL that preserves child-playlist signatures.
+  Notes: TVS, TVS+ and Selangor TV use official Glue playback by default.
+    source=mytv selects the native MYTV alternate where channelId exists.
+    source=proxy selects the Glue worker proxy for unprotected playback.
+    website/backup use the official Glue source; quality does not select
+    variants in that source. TVS+ browser embeds use its official player.
+  Default when slugOrId is omitted: tv5.
+
+POST /mytv/channel-play
+  Body (JSON forwarded to the upstream channel-play API):
+    channelId: <channel UUID> (required upstream)
+    deviceId: <device ID>
+    protocol: hls
+    context: {deviceType, app, appVersion, os, network}
+  Response: upstream channel-play JSON and status.
+
+POST /mytv/sign
+  Body (application/json):
+    path: <CDN playlist directory path> (required)
+    channelId: <channel UUID> (required)
+  Response: {success, data: {md5, expires}}.
+
+# Audio+
+
+GET /audioplus/embed/{slug}
+  Path:
+    slug: <registered Audio+ station slug or alias>
+  Query:
+    type: [audio, video]
+    player: [audio, video] (alias; used if type is absent)
+    Live query parameters are forwarded to the player's playback request.
+  Default when slug is omitted: hotfm.
+
+GET /audioplus/live/{slug}
+  Path:
+    slug: <registered Audio+ station slug or alias>
+  Query:
+    json: [true, false]
+  Response: JSON when json=true, otherwise 307 redirect to the stream.
+  Notes: format=json is not supported by this handler.
+  Default when slug is omitted: hotfm.
+
+GET /audioplus/history
+  Query:
+    domain: <Audio+ player hostname> (default: dengar.hotfm.audio)
+  Response: upstream /player/history JSON.
+
+# TVS / TVS+
+
+GET /tvs/embed/{slug}
+GET /tvsplus/embed/{slug}
+GET /tvsarawak/embed/{slug}
+  Path:
+    slug: [tvs, tvsplus, tvs+]
+  Query:
+    type: [audio, video]
+    player: [audio, video] (alias; used if type is absent)
+    Live query parameters are forwarded to the player's playback request.
+  Response: HTML player; TVS+ uses the official player iframe.
+  Default when slug is omitted: tvsplus for /tvsplus; tvs for the other aliases.
+
+GET /tvs/live/{slug}
+GET /tvsplus/live/{slug}
+GET /tvsarawak/live/{slug}
+  Path:
+    slug: [tvs, tvsplus, tvs+]
+  Query:
+    json: [true, false]
+    format: [json]
+    source: [website, backup, proxy, mytv]
+    redirect: [true, false]
+    quality: [1080p, 720p, 480p] (native MYTV redirect path only)
+  Response: TVS defaults to protected playback JSON, including DASH URL,
+    Widevine license URL, entitlement token, expiry and renewal URL.
+    TVS+ returns JSON when requested, otherwise 307 to the official HLS feed.
+  Notes: website/backup use official Glue playback (the default).
+    source=proxy selects worker-proxied unprotected playback.
+    source=mytv selects native MYTV for TVS; TVS+ has no native MYTV alternate.
+    redirect=true on TVS redirects to protected HLS; DRM is still required.
+  Default when slug is omitted: tvsplus for /tvsplus; tvs for the other aliases.
+
+GET /tvs/drm/token/1
+POST /tvs/drm/token/1
+GET /tvsplus/drm/token/1
+POST /tvsplus/drm/token/1
+GET /tvsarawak/drm/token/1
+POST /tvsarawak/drm/token/1
+  Body: no body required; the worker POSTs {} to the official token service.
+  Response: current TVS DRM token, headerName, license URLs and expiry.
+  Notes: only content ID 1 is supported; other IDs return 404.
+    Use the raw token in X-AxDRM-Message for license requests, without Bearer.
+
+# Sooka
+
+GET /sooka/embed/{slugOrId}
+  Path:
+    slugOrId: <registered Sooka channel slug, alias, or channel UUID>
+  Query:
+    type: [audio, video]
+    player: [audio, video] (alias; used if type is absent)
+    Live query parameters are forwarded to the player's playback request.
+  Default when slugOrId is omitted: lawak-sentral.
+
+GET /sooka/live/{slugOrId}
+GET /sooka/live/{slugOrId}.mpd
+GET /sooka/live/{slugOrId}/dash
+  Path:
+    slugOrId: <registered Sooka channel slug, alias, or channel UUID>
+  Query:
+    json: [true, false]
+    format: [json, dash, mpd]
+    proxy: [true, false] (default: false)
+    refresh: [true, false] (default: false)
+  Response: redirect, HLS/DASH manifest, or JSON depending on channel/query.
+    .mpd, /dash and format=dash|mpd request DASH where supported.
+    Protected channels return JSON when requested, otherwise HLS/DASH manifests.
+    json=true takes precedence over a DASH selector.
+  Notes: account authentication, CDN playback tokens and DRM license tokens
+    are separate. Playback may fail because of entitlements or upstream policy.
+    Hidden channels remain addressable through their registered IDs/slugs.
+  Default when slugOrId is omitted: lawak-sentral.
+
+GET /sooka/auth
+GET /sooka/auth/status
+  Response: account status; polls upstream if a pairing session is pending.
+
+GET /sooka/auth/pair
+  Query:
+    force: [true, false] (default: false; true starts a new pairing session)
+    html: [true, false] (default: false)
+  Headers:
+    Accept: text/html (also requests the pairing page)
+  Response: pairing instructions JSON or HTML. May change account session state.
+
+POST /sooka/auth/token
+  Body (application/json):
+    accessToken: <access token> (required; alias: token)
+    refreshToken: <refresh token> (optional)
+    customerId: <customer ID> (optional; otherwise inferred from JWT)
+    deviceId: <device ID> (optional; otherwise inferred/defaulted)
+    email: <account email> (optional)
+    entitlements: <array of plan IDs> (optional; default: [SVOD004])
+  Response: saves account authentication and returns status/expiry.
+
+POST /sooka/auth/refresh
+  Body: none.
+  Response: refreshes the stored account token; success/status JSON.
+
+POST /sooka/auth/logout
+  Body: none.
+  Response: clears the stored account session.
+
+GET /sooka/drm/token/{slugOrId}
+GET /sooka/drm/ctg/{slugOrId}
+GET /sooka/drm/token
+GET /sooka/drm/ctg
+GET /sooka/drm
+  Path:
+    slugOrId: <channel slug, channel UUID, broadcast ID, or VOD content ID>
+  Query:
+    contentId: <content ID> (required when no path ID is supplied)
+  Response: current DRM token, licenseServerUrl, filter, expiry and auth status.
+  Notes: /sooka/drm defaults to ctg; the path ID overrides contentId.
+
+POST /sooka/drm/license/{slugOrId}
+POST /sooka/drm/license
+  Path:
+    slugOrId: <channel slug, channel UUID, or broadcast ID>
+  Query:
+    contentId: <ID> (required when no path ID is supplied)
+  Body: binary Widevine license challenge (application/octet-stream).
+  Response: binary upstream license response; uses an unexpired stored DRM token.
+
+POST /sooka/drm/sync
+  Body (application/json):
+    tokens: <array of token records>, or one token record at the top level.
+    Record fields:
+      id: <channel slug> (aliases: slug, channel)
+      contentId: <channel/content UUID>
+      broadcastId: <broadcast ID>
+      drmToken: <DRM token> (alias: token)
+      uwmToken: <CDN playback token> (alias: uwm_token)
+      expiresAt: <Unix seconds or milliseconds> (alias: expires_at)
+      filter: <integer> (default: 480)
+      licenseServerUrl: <license URL> (optional)
+  Response: saved token summaries; updates in-memory and optional D1 caches.
+  Notes: records may contain DRM and/or UWM tokens. For a single top-level
+    record, drmToken is required to select single-record input mode.
+    Missing or past expiry is defaulted to eight hours by the handler.
+    /sooka/drm/token/sync and /sooka/drm/ctg/sync are compatibility forms.
+
+GET /sooka/search
+  Query:
+    q: <search text> (required; alias: query)
+    type: [all, movie, movies, series, tv_show, tv] (default: all)
+    page: <integer> (default: 1)
+    limit: <integer, 1-50> (default: 20)
+  Response: experimental movie/series search results and content/VOD URLs.
+
+GET /sooka/content/{type}/{contentId}
+GET /sooka/content/{contentId}
+  Path:
+    type: [movie, movies, tv_show, series, tv, episode, channel]
+    contentId: <content UUID or numeric ID>
+  Response: normalized content details, artwork, entitlements and playback URLs.
+  Notes: the short form recognizes UUID-like or numeric IDs and starts with movie.
+    movies normalizes to movie; series/tv normalize to tv_show.
+
+GET /sooka/series/{seriesId}
+  Path:
+    seriesId: <series UUID>
+  Response: series details and episodes with content/VOD URLs.
+  Notes: the upstream episode request is fixed at limit=50, offset=0;
+    this endpoint does not accept pagination parameters.
+
+GET /sooka/vod/{contentId}
+  Path:
+    contentId: <movie, TV show, or episode ID>
+  Query:
+    json: [true, false]
+    format: [json]
+  Response: JSON when requested, otherwise 307 to HLS or DASH.
+    Protected content still requires its license handshake.
+
+GET /sooka/embed/vod/{contentId}
+  Path:
+    contentId: <movie, TV show, or episode ID>
+  Response: HTML video player using /sooka/vod/{contentId}?json=true.
+
+# Provider HTTPS proxies
+
+GET /tonton/https/{targetPath}
+GET /syokmy/https/{targetPath}
+GET /syok/https/{targetPath}
+GET /rtmklik/https/{targetPath}
+GET /rtm/https/{targetPath}
+GET /mytv/https/{targetPath}
+GET /audioplus/https/{targetPath}
+GET /tvs/https/{targetPath}
+GET /tvsplus/https/{targetPath}
+GET /tvsarawak/https/{targetPath}
+GET /sooka/https/{targetPath}
+  Path:
+    targetPath: <upstream hostname/path WITHOUT https://>
+  Query:
+    Upstream query parameters are preserved.
+    sooka_token: <CDN playback token> (optional; extracted for proxy auth)
+  Headers:
+    Range: <byte range> (optional)
+  Response: proxied upstream media/manifest with provider request headers;
+    child manifest URLs are rewritten through the worker where applicable.
+  Example: /mytv/https/cdn.example.com/live/playlist.m3u8?md5=...&expires=...
+
+# Legacy player routes
+
+GET /embed/{slug}
+GET /player/{slug}
+  Path:
+    slug: <registered channel/station slug> (default when omitted: tv3)
+  Query:
+    type: [audio, video]
+    player: [audio, video] (alias; used if type is absent)
+    Live query parameters are forwarded to the player's playback request.
+  Response: HTML player; starts with Tonton and auto-resolves other providers
+    when the slug is not registered with Tonton.
+
+# Legacy Syok aliases (root-only; these names are not recognized prefix targets)
+
+GET https://api.dani-dev.co.za/dailymotion/embed/{slug}
+GET https://api.dani-dev.co.za/awani/embed/{slug}
+GET https://api.dani-dev.co.za/dailymotion/live/{slug}
+GET https://api.dani-dev.co.za/awani/live/{slug}
+GET https://api.dani-dev.co.za/dailymotion/https/{targetPath}
+GET https://api.dani-dev.co.za/awani/https/{targetPath}
+GET https://api.dani-dev.co.za/dailymotion/podcasts
+GET https://api.dani-dev.co.za/awani/podcasts
+  Parameters and defaults: same as the corresponding Syok routes above.
+  Notes: /v1/stream/dailymotion/... and /v1/stream/awani/... are not supported
+    by the current dynamic-prefix resolver. Prefer /syokmy or /syok.
+
+# Routing and response notes
+# mediaprima, manamana, astro, unifi and unifitv are EPG route aliases/providers;
+# they do not add corresponding live/embed/proxy handlers.
+# Maintenance: health and OPTIONS remain available; other API routes return 503,
+# while paths containing /embed return maintenance HTML.
+# JSON booleans are query strings: most flags enable only on the exact value true.
+# Exceptions and selector precedence are described at the relevant endpoint.

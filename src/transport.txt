@@ -1,41 +1,1234 @@
 https://api.dani-dev.co.za/v2/transport
 
-GET /rapidkl/stations
-GET /rapidkl/fare
+Usage:
+  Append an endpoint below to the base URL above.
+  Example: https://api.dani-dev.co.za/v2/transport/rapidkl/no-auth/stations
+  Parameters are optional unless marked (required) or (required together).
+  Query values and substituted path segments must be URL-encoded.
+  JSON POST payloads use Content-Type: application/json.
+  Alias paths accept the same methods and parameters as their primary endpoint.
+  Methods below describe intended usage; most non-TuJu handlers do not strictly
+  reject other HTTP methods. CORS advertising a method does not add an endpoint.
+  Endpoint availability here means implemented in this Worker. Upstream success
+  is not guaranteed; this export does not certify every upstream as live.
+  Payload requirements below distinguish Worker validation from upstream schemas.
+  No body is needed for GET requests. No query is needed unless listed.
+
+GET /
+  Usage: API directory, version, health status, timestamp, and provider links.
+
+OPTIONS /*
+  Usage: CORS preflight for any path; returns HTTP 204.
+
+
+RAPIDKL - PUBLIC TRANSIT AND STATIC DATA (NO AUTHENTICATION)
+
+GET /rapidkl/no-auth
+GET /rapidkl/no-auth/help
+  Usage: Public RapidKL endpoint directory and parameter documentation.
+
+GET /rapidkl/no-auth/train-eta
+  Usage: Calculate train arrivals, headways, timetables, and service status.
   Query:
-    from: <string> (required)
-    to: <string> (required)
-GET /rapidkl/geocode
+    station_id: <string> (required; station code or name, e.g. KJ14 or KLCC)
+    line: <string> (line filter: KJ, AG, SP, KG, PY, MR, BRT, SA)
+    time: <HH:mm or ISO datetime> (default: current Malaysian time, UTC+8)
+  Query aliases:
+    station_id: station, id, code
+    line: route_id
+  Example: /rapidkl/no-auth/train-eta?station_id=KJ14
+  Note: ETAs are calculated by the Worker's timetable/headway engine.
+
+GET /rapidkl/no-auth/stations
+  Usage: Cached station directory, with bundled fallback.
+  Query:
+    refresh: [true, false] (default: false; true fetches upstream and updates KV)
+  Example: /rapidkl/no-auth/stations?refresh=true
+
+GET /rapidkl/no-auth/stations/refresh
+  Usage: Force a station-directory refresh; equivalent to stations?refresh=true.
+
+GET /rapidkl/no-auth/fare
+  Usage: Calculate transit fare between stations.
+  Query:
+    from: <string> (required; origin station code)
+    to: <string> (required; destination station code)
+  Example: /rapidkl/no-auth/fare?from=KJ1&to=KJ15
+
+GET /rapidkl/no-auth/geocode
+  Usage: Search station or location names.
   Query:
     input: <string> (required)
-    scope: <string>
-    agency: <string>
-GET/POST /rapidkl/journey
-  Query:
-    flat: <decimal> (required)
-    flng: <decimal> (required)
-    tlat: <decimal> (required)
-    tlng: <decimal> (required)
-    agency: <string>
-    mode: <string>
-    route_type: [CHEAPEST, FASTEST, LEAST_TRANSIT]
-    departure_datetime: <YYYY-MM-DD HH:mm:ss>
-GET /rapidkl/announcements
-  Query:
-    maxposts: <integer>
+    scope: <string> (default: station)
+    agency: <string> (default: rapidkl)
+  Query aliases:
+    input: q, query
+  Example: /rapidkl/no-auth/geocode?input=KLCC
 
-GET /rapidkl/data/bus_routes
-GET /rapidkl/data/transit_polylines
-GET /rapidkl/data/transit_schematic_stations
+GET/POST /rapidkl/no-auth/journey
+  Usage: Multimodal journey planning between coordinates.
+  Query (GET) / Payload (POST JSON; body values take precedence):
+    flat: <decimal> (required; origin latitude)
+    flng: <decimal> (required; origin longitude)
+    tlat: <decimal> (required; destination latitude)
+    tlng: <decimal> (required; destination longitude)
+    agency: <string> (default: rapidkl)
+    mode: <string> (default: TRANSIT)
+    route_type: [CHEAPEST, FASTEST, LEAST_TRANSIT] (default: CHEAPEST)
+    departure_datetime: <YYYY-MM-DD HH:mm:ss> (default: current UTC time)
+  Parameter aliases:
+    route_type: type
+  Example: /rapidkl/no-auth/journey?flat=3.1343&flng=101.6865&tlat=3.1578&tlng=101.7118
+  Payload example:
+    {"flat":3.1343,"flng":101.6865,"tlat":3.1578,"tlng":101.7118,"route_type":"CHEAPEST"}
+  Note: Use JSON for POST; the handler's form fallback may fail after body parsing.
 
-GET /ktmb/session
+GET /rapidkl/no-auth/tile/:z/:x/:y.png
+  Usage: Proxy a PNG map tile.
+  Alias: /rapidkl/no-auth/tile/:z/:x/:y (without the .png suffix)
+  Path:
+    z: <integer> (required; zoom)
+    x: <integer> (required; tile column)
+    y: <integer> (required; tile row)
+  Example: /rapidkl/no-auth/tile/12/3210/2012.png
+
+GET /rapidkl/no-auth/tile
+  Usage: Query-parameter form of the PNG map tile proxy.
+  Query:
+    z: <integer> (required)
+    x: <integer> (required)
+    y: <integer> (required)
+  Example: /rapidkl/no-auth/tile?z=12&x=3210&y=2012
+
+GET /rapidkl/no-auth/announcements
+  Usage: RapidKL service notices and announcements.
+  Query:
+    maxposts: <integer> (default: 10)
+  Example: /rapidkl/no-auth/announcements?maxposts=10
+
+GET /rapidkl/no-auth/rail-network
+  Usage: Cached rail-network topology with upstream refresh support.
+  Query:
+    refresh: [true, false] (default: false)
+
+GET /rapidkl/no-auth/bus-routes
+  Usage: Static bus route dataset from KV or bundled fallback.
+
+GET /rapidkl/no-auth/transit-polylines
+  Usage: Static transit line geometry from KV or bundled fallback.
+
+GET /rapidkl/no-auth/transit-schematic-stations
+  Usage: Static station schematic positions from KV or bundled fallback.
+
+
+RAPIDKL - PULSE AUTHENTICATION, ACCOUNTS, AND TRANSIT
+
+Authentication usage:
+  For PULSE proxy endpoints, the Worker can obtain a configured or guest session.
+  User-specific operations require an upstream session with suitable privileges.
+  Send a token returned by POST /rapidkl/auth with user-specific requests.
+  Header: Authorization: Bearer <PULSE token>
+  Query alternatives: token=<token> or auth_token=<token>.
+  Caller tokens are used by profile, cloud sync, alerts, preferences, subscriber,
+  token renewal/logout, and core transit endpoints.
+  Google/Apple exchange and registration/OTP handlers use the Worker session;
+  they do not pass through a caller token. Shop authentication is separate.
+
+GET /rapidkl
+GET /rapidkl/help
+  Usage: Full RapidKL subsystem directory.
+
+GET/POST /rapidkl/generate-device
+  Usage: Generate a synthetic mobile device payload.
+  Query / Payload:
+    device_type: [android, ios] (optional; defaults in device generator)
+  Parameter aliases:
+    device_type: type
+  Payload example:
+    {"device_type":"android"}
+  Note: A query value takes precedence over a POST body value here.
+
+GET /rapidkl/auth
+  Usage: Inspect the Worker's cached PULSE session and credential configuration.
+  Alias: /rapidkl/login
+  Query:
+    refresh: [true, false] (true logs in again using configured Worker credentials)
+    debug: [1] (include decoded JWT claims for a cached token)
+  Note: This inspects the Worker cache, not the caller's bearer token.
+
+POST /rapidkl/auth
+  Usage: Login to MyRapid PULSE; returns token, expiry, and user information.
+  Alias: /rapidkl/login
+  Payload:
+    email: <string> (required)
+    password: <string> (required)
+    device_type: [android, ios] (default: android)
+  Payload example:
+    {"email":"user@example.com","password":"<password>","device_type":"android"}
+  Note: These fields can also be read from the query on POST. JSON is preferred.
+  Note: This caller login is not persisted to the Worker's shared KV session.
+
+POST /rapidkl/auth-google
+  Usage: Exchange a Google Sign-In ID token through PULSE.
+  Payload:
+    id_token: <string> (required)
+    email: <string>
+    device_type: [android, ios]
+    fcm_token: <string>
+  Payload example:
+    {"id_token":"<Google ID token>","device_type":"android"}
+
+POST /rapidkl/auth-apple
+  Usage: Exchange an Apple Sign-In identity token through PULSE.
+  Payload:
+    identity_token: <string> (required)
+    authorization_code: <string>
+    user_id: <string>
+    device_type: <string> (e.g. ios)
+  Payload example:
+    {"identity_token":"<Apple identity token>","device_type":"ios"}
+
+POST /rapidkl/register
+  Usage: Submit member registration; JSON is forwarded to PULSE.
+  Alias: /rapidkl/submit-registration-form
+  Payload:
+    email: <string> (required by Worker)
+    password: <string> (required by Worker)
+    name: <string> (listed as required in upstream helper)
+    phone: <string>
+    confirm_password: <string>
+    device_type: [android, ios]
+  Payload example:
+    {"name":"Example User","email":"user@example.com","password":"<password>","confirm_password":"<password>"}
+
+POST /rapidkl/verify-otp
+  Usage: Verify a registration OTP.
+  Payload:
+    email: <string> (required)
+    otp: <string> (required; OTP code)
+  Payload example:
+    {"email":"user@example.com","otp":"123456"}
+
+POST /rapidkl/resend-otp
+  Usage: Request another registration OTP.
+  Payload:
+    email: <string> (required)
+  Payload example:
+    {"email":"user@example.com"}
+
+GET/POST /rapidkl/reget-token
+  Usage: Renew a PULSE token; a renewed token may update the Worker KV cache.
+  Alias: /rapidkl/refresh-token
+  Headers: Authorization: Bearer <PULSE token> (optional override)
+  Payload: None required.
+
+POST /rapidkl/logout
+  Usage: Logout upstream and clear the Worker's cached PULSE auth session.
+  Headers: Authorization: Bearer <PULSE token> (optional override)
+  Payload: JSON object forwarded upstream; no fields validated by Worker.
+  Payload example:
+    {}
+
+POST /rapidkl/edit-profile
+  Usage: Update the authenticated user's profile.
+  Payload:
+    name: <string> (name or phone is required)
+    phone: <string> (name or phone is required)
+  Payload example:
+    {"name":"Example User","phone":"<phone number>"}
+
+POST /rapidkl/update-password
+  Usage: Change the authenticated user's password.
+  Payload:
+    current_password: <string> (required)
+    new_password: <string> (required)
+    confirm_password: <string> (listed as required in upstream helper)
+  Payload example:
+    {"current_password":"<old password>","new_password":"<new password>","confirm_password":"<new password>"}
+
+POST /rapidkl/delete-account
+  Usage: Request deletion of the authenticated account.
+  Payload:
+    confirm: <boolean> (required; send true)
+    reason: <string>
+  Payload example:
+    {"confirm":true,"reason":"<reason>"}
+
+POST /rapidkl/upload-avatar
+  Usage: Forward an avatar upload to PULSE storage.
+  Headers:
+    Content-Type: multipart/form-data; boundary=<generated boundary>
+    Authorization: Bearer <PULSE token>
+  Payload:
+    Multipart body forwarded unchanged; Worker does not validate field names.
+    Use upstream-accepted upload fields; the file-field name is not established
+    by this handler. Let the HTTP client generate the multipart boundary.
+
+POST /rapidkl/blob-sas
+  Usage: Request an upstream storage SAS for a file.
+  Payload:
+    filename: <string> (required)
+    container: <string> (helper documents documents as the upstream default)
+  Payload example:
+    {"filename":"proof.pdf","container":"documents"}
+
+GET/POST /rapidkl/saved-routes
+  Usage: GET retrieves bookmarks; POST saves an itinerary bookmark.
+  Alias: /rapidkl/save-route
+  Payload (POST):
+    title: <string> (required by Worker)
+    from_name: <string> (listed as required in upstream helper)
+    destination_name: <string> (listed as required in upstream helper)
+    Other itinerary fields: forwarded unchanged; upstream schema applies.
+  Payload example:
+    {"title":"Commute","from_name":"KL Sentral","destination_name":"KLCC"}
+
+POST /rapidkl/delete-saved-route
+  Usage: Delete an itinerary bookmark.
+  Query / Payload:
+    id: <string or number> (required; POST body takes precedence)
+  Payload example:
+    {"id":"<saved route ID>"}
+
+GET/POST /rapidkl/trip-history
+  Usage: GET retrieves trip history; POST records a trip.
+  Alias: /rapidkl/save-trip-history
+  Payload (POST):
+    origin: <upstream location value> (required)
+    destination: <upstream location value> (required)
+    Other trip fields: forwarded unchanged; upstream schema applies.
+  Note: Worker only checks the presence of origin and destination. Their nested
+    schema is not established by this handler.
+
+POST /rapidkl/favorite-bus-routes
+  Usage: Subscribe to disruption alerts for a bus route.
+  Payload:
+    route_id: <string> (required; alias: route-id)
+    agency: <string> (default: rapidkl)
+    fcm_token: <string> (default: empty string)
+  Payload example:
+    {"route_id":"750","agency":"rapidkl","fcm_token":"<FCM token>"}
+
+POST /rapidkl/remove-favorite-bus-route
+  Usage: Remove a favorite bus route / alert subscription.
+  Payload:
+    route_id: <string> (required; alias: route-id)
+    agency: <string> (default: rapidkl)
+  Payload example:
+    {"route_id":"750","agency":"rapidkl"}
+
+POST /rapidkl/update-fcm-token
+  Usage: Update the device push token used for route notifications.
+  Payload:
+    fcm_token: <string> (required)
+    Additional JSON fields are forwarded unchanged.
+  Payload example:
+    {"fcm_token":"<FCM token>"}
+
+GET/POST /rapidkl/notification-email
+  Usage: Read or update notification-email settings.
+  Payload (POST): JSON object forwarded unchanged; no Worker field validation.
+  Note: Exact preference-field names and required fields are upstream-defined.
+
+POST /rapidkl/agency
+  Usage: Set preferred transit agency.
+  Payload:
+    agency: [rapidkl, rapidpenang, rapidkuantan] or <integer> (required)
+    device_type: <string> (default: android)
+  Parameter aliases:
+    agency: agency_id, preferredAgency
+  Agency IDs: 1 = Rapid KL, 2 = Rapid Penang, 3 = Rapid Kuantan.
+  Payload example:
+    {"agency":"rapidkl","device_type":"android"}
+
+POST /rapidkl/language
+  Usage: Set account locale.
+  Payload:
+    locale: <string> (required; e.g. en_US, ms_MY)
+  Parameter aliases:
+    locale: language
+  Payload example:
+    {"locale":"en_US"}
+
+GET /rapidkl/subscriber
+  Usage: Query subscriber / concession status using an NRIC.
+  Query:
+    icno: <string> (required; Malaysian NRIC without dashes)
+  Query aliases:
+    icno: nric
+  Example: /rapidkl/subscriber?icno=<12-digit-NRIC>
+
+GET /rapidkl/journey-planner
+  Usage: Authenticated PULSE journey planning.
+  Query:
+    from_lat: <decimal> (required)
+    from_lng: <decimal> (required)
+    dest_lat: <decimal> (required)
+    dest_lng: <decimal> (required)
+    bus: [0, 1] (default: 1)
+    rail: [0, 1] (default: 1)
+    erl: [0, 1] (default: 1)
+    ktm: [0, 1] (default: 1)
+  Query aliases:
+    from_lat: from-lat, flat
+    from_lng: from-lng, flng
+    dest_lat: dest-lat, destination_lat, tlat
+    dest_lng: dest-lng, destination_lng, tlng
+  Example: /rapidkl/journey-planner?from_lat=3.1343&from_lng=101.6865&dest_lat=3.1578&dest_lng=101.7118
+  Note: datetime is mentioned by the validation helper but is not forwarded by
+    the current implementation; it has no effect here.
+
+GET /rapidkl/route-detail
+  Usage: Retrieve a transit route's details.
+  Query:
+    route_id: <string> (required; e.g. 750, T801, KG_LINE)
+    agency_id: <string or integer> (default: 1)
+  Query aliases:
+    route_id: route-id, routeId, route
+    agency_id: agencyId, agency
+  Example: /rapidkl/route-detail?route_id=750
+
+GET /rapidkl/next-arrival
+  Usage: Next arrival at a stop or station.
+  Query:
+    stop_id: <string> (required)
+    agency: <string> (default: rapidkl)
+  Query aliases:
+    stop_id: stop-id, stopId, stop
+  Example: /rapidkl/next-arrival?stop_id=1001542
+
+GET /rapidkl/nearby-stops
+GET /rapidkl/nearby-routes
+  Usage: Find nearby stops or routes, respectively.
+  Query:
+    lat: <decimal> (required)
+    lng: <decimal> (required)
+    radius: <decimal> (meters; default: 500)
+  Example: /rapidkl/nearby-stops?lat=3.1343&lng=101.6865&radius=500
+  Example: /rapidkl/nearby-routes?lat=3.1343&lng=101.6865&radius=500
+
+GET /rapidkl/nearby-pois
+  Usage: List nearby places of interest.
+  Query:
+    category: [Eat, Shop, Play] (default: Eat)
+    lat: <decimal>
+    lng: <decimal>
+  Example: /rapidkl/nearby-pois?category=Eat&lat=3.1343&lng=101.6865
+
+GET /rapidkl/station-facilities
+  Usage: List rail station facilities; optionally filter by station.
+  Query:
+    station_id: <string>
+  Query aliases:
+    station_id: station-id
+
+GET /rapidkl/rail-map
+  Usage: Retrieve the PULSE transit rail map.
+
+GET /rapidkl/realtime-bus
+  Usage: Real-time bus arrival telemetry.
+  Alias: /rapidkl/realtime
+  Query:
+    route_id: <string> (required)
+    direction_id: [0, 1] (required)
+    stop_id: <string> (required)
+    agency_id: <string or integer> (default: 1)
+  Query aliases:
+    route_id: route-id, route
+    direction_id: direction-id, dir
+    stop_id: stop-id, stop
+    agency_id: agencyId, agency
+  Example: /rapidkl/realtime-bus?route_id=750&direction_id=0&stop_id=1001542
+
+GET /rapidkl/bus-agency-routes
+  Usage: Retrieve bus route/stop data for an agency.
+  Alias: /rapidkl/stops-agency
+  Query:
+    agency: <string> (default: rapidkl)
+
+
+RAPIDKL - MYRAPID SHOP
+
+Shop usage:
+  Shop sessions are separate from PULSE sessions.
+  The customer and order handlers forward Authorization directly to the shop.
+  Shop auth and payment-receipt handlers do not forward Authorization.
+  These handlers do not forward client query filters to WooCommerce.
+
+POST /rapidkl/shop/auth
+  Usage: Authenticate a MyRapid shop customer.
+  Alias: /rapidkl/shop-auth
+  Payload:
+    email: <string> (required)
+    password: <string> (required)
+  Payload example:
+    {"email":"user@example.com","password":"<password>"}
+
+GET/POST /rapidkl/shop/customer
+  Usage: GET queries customers; POST forwards a customer creation payload.
+  Alias: /rapidkl/shop-customer
+  Headers:
+    Authorization: <shop authorization accepted upstream>
+  Payload (POST): WooCommerce customer JSON forwarded unchanged.
+  Note: Worker does not establish or validate the upstream customer schema.
+
+GET /rapidkl/shop/orders
+  Usage: Retrieve shop orders using the supplied shop authorization.
+  Alias: /rapidkl/shop-orders
+  Headers:
+    Authorization: <shop authorization accepted upstream>
+
+POST /rapidkl/shop/payment-receipt
+  Usage: Request a payment receipt email.
+  Alias: /rapidkl/shop-payment-receipt
+  Payload:
+    order_id: <string or number> (required)
+    customer_email: <string> (target email; upstream validation applies)
+  Payload example:
+    {"order_id":123,"customer_email":"user@example.com"}
+
+
+GOKL - CITY BUS
+
+GoKL usage:
+  No caller authentication required; Worker supplies upstream credentials.
+  Route identifiers accept a number, color, full route name, or internal code
+  where resolvable (e.g. 1, GREEN, GOKL-01-(GREEN), S0010).
+
+GET /gokl
+GET /gokl/help
+  Usage: GoKL endpoint directory.
+
+GET /gokl/routes
+  Usage: List routes, search routes, or find nearby stops/routes.
+  Query:
+    search: <string> (route search; aliases: name, routeName, route)
+    nearMe: [1] (nearby mode when there is no search; alias: near_me)
+    lat: <decimal> (required in nearby mode)
+    lng: <decimal> (required in nearby mode)
+    radius: <decimal> (nearby radius in km; default: 0.5)
+  Example: /gokl/routes
+  Example: /gokl/routes?search=GREEN
+  Example: /gokl/routes?nearMe=1&lat=3.1478&lng=101.6953
+
+GET /gokl/search-routes
+  Usage: Search routes by name, color, number, or code.
+  Query:
+    name: <string> (required; aliases: search, routeName, route)
+  Example: /gokl/search-routes?name=GREEN
+
+GET /gokl/nearby
+  Usage: Nearby stops and active bus lines.
+  Alias: /gokl/near-me
+  Query:
+    lat: <decimal> (required)
+    lng: <decimal> (required)
+    radius: <decimal> (km; default: 0.5)
+
+GET /gokl/route-detail
+  Usage: Route geometry and stop sequence.
+  Query:
+    route: <string> (required; aliases: name, routeName, route_id)
+  Example: /gokl/route-detail?route=GREEN
+
+GET /gokl/timetable
+  Usage: Route operating timetable.
+  Query:
+    route: <string> (required; aliases: name, routeName, route_id)
+    day_type: [WD, SA, SU] (default: WD; alias: dayType)
+  Example: /gokl/timetable?route=GREEN&day_type=WD
+
+GET /gokl/route-eta
+  Usage: Live ETA and fleet tracking for a route.
+  Query:
+    route: <string> (required; aliases: name, routeName, route_id)
+    lat: <decimal> (default: 3.1478)
+    lng: <decimal> (default: 101.6953)
+  Example: /gokl/route-eta?route=GREEN
+
+GET /gokl/stop-eta
+  Usage: Live arrival telemetry for a bus stop on a route.
+  Alias: /gokl/bus-stop-eta
+  Query:
+    route: <string> (required; aliases: name, routeName, route_id)
+    stop: <string> (required; aliases: busStopNumber, stop_id, stopId)
+    lat: <decimal> (default: 3.1478)
+    lng: <decimal> (default: 101.6953)
+  Example: /gokl/stop-eta?route=GREEN&stop=1001518
+
+GET /gokl/routes/:route
+  Usage: Path form of /gokl/route-detail; :route is required.
+
+GET /gokl/routes/:route/timetable
+  Usage: Path form of /gokl/timetable; :route is required.
+  Query:
+    day_type: [WD, SA, SU] (default: WD; alias: dayType)
+
+GET /gokl/routes/:route/eta
+  Usage: Path form of /gokl/route-eta; :route is required.
+  Query:
+    lat: <decimal> (default: 3.1478)
+    lng: <decimal> (default: 101.6953)
+
+GET /gokl/routes/:route/eta/:stop
+  Usage: Path form of /gokl/stop-eta; :route and :stop are required.
+  Query:
+    lat: <decimal> (default: 3.1478)
+    lng: <decimal> (default: 101.6953)
+
+GET /gokl/landmarks
+  Usage: Search landmarks.
+  Query:
+    query: <string> (required; aliases: landmarkName, landmark_name, name)
+    region: <string> (default: KL)
+  Example: /gokl/landmarks?query=KLCC
+
+GET /gokl/pois
+  Usage: Nearby places of interest.
+  Query:
+    lat: <decimal> (default: 3.1478)
+    lng: <decimal> (default: 101.6953)
+    radius: <decimal> (km; default: 1.0)
+
+GET /gokl/announcements
+  Usage: Service bulletins and posts.
+  Alias: /gokl/posts
+  Query:
+    date: <YYYY-MM-DD> (default: current UTC date; alias: publishingDate)
+    size: <string> (default: MEDIUM)
+    lastPostOrder: <string or integer> (pagination cursor; alias: last_post_order)
+
+GET /gokl/static-pages
+  Usage: List static informational page URLs or return one page URL.
+  Alias: /gokl/pages
+  Query:
+    page: [about, contact, copyright, faq, privacy_policy, route_map,
+           service_frequency, terms_and_conditions]
+  Example: /gokl/static-pages?page=route_map
+  Note: An omitted or unrecognized page returns the full directory.
+
+
+SITS - SMART SELANGOR BUS
+
+SITS usage:
+  Every /sits endpoint also works under /smartselangor with the same suffix.
+  No caller authentication required; Worker supplies upstream credentials.
+  Council codes are returned by /sits/councils. Route codes include SA01.
+
+GET /sits
+GET /sits/help
+  Usage: Smart Selangor endpoint directory.
+
+GET /sits/councils
+  Usage: List municipal councils and operator codes.
+  Alias: /sits/entities
+
+GET /sits/routes
+  Usage: List council routes, search routes, or find nearby stops.
+  Alias: /sits/entity-routes
+  Query:
+    councils: <comma-separated council codes> (default: all councils)
+    search: <string> (switches to route-name search; aliases: routeName, name)
+    nearMe: [1] (nearby mode when no search; alias: near_me)
+    lat: <decimal> (required in nearby mode)
+    lng: <decimal> (required in nearby mode)
+    radius: <decimal> (nearby radius in km; default: 0.5)
+    council: <string> (search/nearby council filter; alias: entityCode)
+  Query aliases:
+    councils: entityCodes, council (for the unfiltered route-list mode)
+  Example: /sits/routes?councils=MBSA,MBPJ
+
+GET /sits/search-routes
+  Usage: Search routes by code/name.
+  Query:
+    name: <string> (required; aliases: routeName, search, route)
+    council: <string> (alias: entityCode)
+  Example: /sits/search-routes?name=SA01
+
+GET /sits/nearby
+  Usage: Find nearby bus stops and routes.
+  Alias: /sits/near-me
+  Query:
+    lat: <decimal> (required)
+    lng: <decimal> (required)
+    radius: <decimal> (km; default: 0.5)
+    council: <string> (alias: entityCode)
+
+GET /sits/landmark-routes
+  Usage: Find routes serving a landmark.
+  Query:
+    landmark_name: <string> (required; aliases: landmarkName, name)
+    lat: <decimal> (required)
+    lng: <decimal> (required)
+    radius: <decimal> (km; default: 0.5)
+    council: <string> (alias: entityCode)
+  Example: /sits/landmark-routes?landmark_name=Seksyen%207&lat=3.07185&lng=101.48932
+
+GET /sits/landmarks
+  Usage: Search landmarks in a region.
+  Query:
+    query: <string> (required; aliases: landmarkName, landmark_name)
+    region: <string> (default: SELANGOR)
+
+GET /sits/route-detail
+  Usage: Route stop sequence and coordinate polylines.
+  Query:
+    route: <string> (required; aliases: routeName, route_id)
+  Example: /sits/route-detail?route=SA01
+
+GET /sits/timetable
+  Usage: Route timetable.
+  Query:
+    route: <string> (required; aliases: routeName, route_id)
+
+GET /sits/route-eta
+  Usage: Live vehicle ETA for a route relative to a location.
+  Query:
+    route: <string> (required; aliases: routeName, route_id)
+    lat: <decimal> (required)
+    lng: <decimal> (required)
+  Example: /sits/route-eta?route=SA01&lat=3.055726&lng=101.525905
+
+GET /sits/stop-eta
+  Usage: Live arrival ETA at a bus stop on a route.
+  Alias: /sits/bus-stop-eta
+  Query:
+    route: <string> (required; aliases: routeName, route_id)
+    stop: <string> (required; aliases: busStopNo, stop_id, number)
+  Example: /sits/stop-eta?route=SA01&stop=100069
+
+GET /sits/routes/:route
+  Usage: Path form of /sits/route-detail; :route is required.
+
+GET /sits/routes/:route/timetable
+  Usage: Path form of /sits/timetable; :route is required.
+
+GET /sits/routes/:route/eta
+  Usage: Path form of /sits/route-eta; :route is required.
+  Query:
+    lat: <decimal> (required)
+    lng: <decimal> (required)
+
+GET /sits/routes/:route/eta/:stop
+  Usage: Path form of /sits/stop-eta; :route and :stop are required.
+
+GET /sits/pois
+  Usage: Find nearby places of interest.
+  Query:
+    lat: <decimal> (required)
+    lng: <decimal> (required)
+    radius: <decimal> (km; default: 5.0)
+
+GET /sits/poi-content
+  Usage: Retrieve a POI's content and sections.
+  Query:
+    id: <string> (required; aliases: poiId, poi_id)
+    size: <string> (default: X_LARGE)
+
+GET /sits/pois/:id/content
+GET /sits/pois/:id/contents
+  Usage: Path forms of /sits/poi-content; :id is required.
+  Query:
+    size: <string> (default: X_LARGE)
+
+GET /sits/announcements
+  Usage: Service bulletins and posts.
+  Alias: /sits/posts
+  Query:
+    date: <YYYY-MM-DD> (default: current UTC date; alias: publishingDate)
+    size: <string> (default: MEDIUM)
+    lastPostOrder: <string or integer> (pagination cursor; alias: last_post_order)
+
+
+KTMB - RAIL STATIONS AND TIMETABLES
+
+GET /ktmb
+GET /ktmb/help
+  Usage: KTMB endpoint directory.
+
+GET /ktmb/generate-session
+  Usage: Obtain an upstream anti-CSRF/session handshake and station information.
+  Note: Timetable searches perform their own handshake; no manual session needed.
+
 GET /ktmb/stations
+  Usage: KTMB station directory from cache or bundled fallback.
+
 GET/POST /ktmb/timetable
-  Query:
+  Usage: Search a train timetable; origin and destination must differ.
+  Alias: /ktmb/search
+  Query (GET) / Payload (POST; JSON or form data):
     fromId: <string> (required)
     toId: <string> (required)
-    onwardDate: <YYYY-MM-DD>
-    onwardTime: <HH:mm>
-    isNow: [true, false]
-    fromData: <string>
-    toData: <string>
+    onwardDate: <YYYY-MM-DD> (default: today in Malaysia)
+    onwardTime: <HH:mm> (default: 06:00)
+    isNow: [true, false] (default: false; true, "true", or "1" enables)
+    fromData: <string> (encrypted station data; resolved automatically if omitted)
+    toData: <string> (encrypted station data; resolved automatically if omitted)
+  Query and payload aliases:
+    fromId: from_id, FromStationId
+    toId: to_id, ToStationId
+    onwardDate: onward_date
+    onwardTime: onward_time
+    isNow: is_now
+    fromData: from_data
+    toData: to_data
+  Additional POST-only aliases:
+    onwardDate: OnwardDate
+    onwardTime: OnwardTime
+    isNow: IsNow
+    fromData: FromStationData
+    toData: ToStationData
+  Example: /ktmb/timetable?fromId=KA01&toId=KA08&onwardDate=2026-10-26
+  Payload example:
+    {"fromId":"KA01","toId":"KA08","onwardDate":"2026-10-26","onwardTime":"08:00","isNow":false}
+
+
+PLUS - TOLL PLAZAS AND CCTV
+
+PLUS usage:
+  No caller authentication required; Worker handles PLUS upstream authentication.
+
+GET /plus
+GET /plus/help
+  Usage: PLUS endpoint directory.
+
+GET /plus/tolls
+  Usage: Search toll plaza master data or find nearby plazas.
+  Alias: /plus/toll-plazas
+  Query:
+    code: <string> (exact plaza code)
+    search: <string> (plaza name/abbreviation; aliases: name, query)
+    concession: <string> (e.g. PLUS, PBSB, BKE)
+    region: <string> (e.g. NORTHERN, CENTRAL, SOUTHERN)
+    system: [O, C] (open or closed toll system; alias: toll_system)
+    type: [B, I] (barrier or interchange; alias: plaza_type)
+    lat: <decimal> (required together with lng for proximity search)
+    lng: <decimal> (required together with lat for proximity search)
+    radius: <decimal> (km; default: 50.0 when coordinates are supplied)
+  Example: /plus/tolls?concession=PLUS&region=NORTHERN
+  Example: /plus/tolls?lat=6.25&lng=100.43&radius=50
+  Note: Plaza metadata, not a PLUS toll-fare calculator.
+
+GET /plus/tolls/:code
+  Usage: Retrieve a single toll plaza.
+  Path:
+    code: <string> (required; plaza code or abbreviation)
+  Example: /plus/tolls/110
+
+GET /plus/concessions
+  Usage: List concessionaires with toll plaza counts.
+
+GET /plus/regions
+  Usage: List operational regions with toll plaza counts.
+
+GET /plus/cctv
+  Usage: List traffic cameras with optional filters and proximity sorting.
+  Aliases: /plus/cctvs, /plus/cctv-feeds
+  Query:
+    lat: <decimal> (default: 3.1478)
+    lng: <decimal> (default: 101.6953; aliases: lon, long)
+    stretch: <string> (default: ALL)
+    highway: <string> (e.g. NKVE, NSE, ELITE)
+    bound: [NB, SB, MD, WB, EB]
+    section: <string> (e.g. C4, C5, S1, N4)
+    search: <string> (camera/location keyword; aliases: name, query)
+    radius: <decimal> (km; optional proximity cutoff)
+  Example: /plus/cctv?highway=NKVE&bound=NB
+
+GET /plus/cctv/:id
+  Usage: Camera metadata, coordinates, and local media URLs.
+  Path:
+    id: <string> (required; camera ID, server code, or camera name)
+  Example: /plus/cctv/48
+
+GET /plus/cctv/live/:id
+  Usage: Camera metadata by default; HTML viewer for Accept: text/html.
+  Path:
+    id: <string> (required; camera ID, server code, or camera name)
+
+GET /plus/cctv/live/:id/view
+  Usage: Auto-refreshing HTML traffic-camera viewer.
+  Path:
+    id: <string> (required; camera ID, server code, or camera name)
+
+GET /plus/cctv/live/:id/gif
+  Usage: Animated GIF stream; HTML viewer for browser navigation unless raw.
+  Path:
+    id: <string> (required; camera ID or server code)
+  Query:
+    raw: [true, 1] (force binary stream)
+    format: [raw] (alternative to raw=true)
+  Example: /plus/cctv/live/48/gif?raw=true
+
+GET /plus/cctv/live/:id/video
+  Usage: MP4 stream; HTML viewer for browser navigation unless raw.
+  Alias: /plus/cctv/live/:id/mp4
+  Path:
+    id: <string> (required; camera ID or server code)
+  Query:
+    raw: [true, 1] (force binary stream)
+    format: [raw] (alternative to raw=true)
+  Example: /plus/cctv/live/48/video?raw=true
+
+
+WCE - WEST COAST EXPRESSWAY
+
+GET /wce
+GET /wce/help
+  Usage: WCE endpoint directory.
+
+GET/POST /wce/toll-rates
+  Usage: Return all route fares, exits from one entry, or a specific route fare.
+  Aliases: /wce/toll_rates, /wce/fares
+  Query / Payload (JSON POST values take precedence for entry/exit/class):
+    entry: <string> (plaza name; aliases: from, origin)
+    exit: <string> (plaza name; aliases: to, destination)
+    class: <integer 1-5> (all classes if omitted; aliases: vehicle_class, vehicleClass)
+  Query only:
+    state: [Selangor, Perak] (catalog filter; not read from POST JSON)
+  Example: /wce/toll-rates
+  Example: /wce/toll-rates?entry=Banting
+  Example: /wce/toll-rates?entry=Banting&exit=Ayer%20Hitam&class=1
+  Payload example:
+    {"entry":"Banting","exit":"Ayer Hitam","class":1}
+  Note: Entry and exit are required together for a specific route calculation.
+    Entry alone lists connected exits. Omit both for the catalog. Exit alone
+    does not select a reverse-origin search. Some WCE sections are disconnected.
+
+GET /wce/interchanges
+  Usage: List WCE plazas/interchanges and connected exits.
+  Aliases: /wce/plazas, /wce/entry-points
+  Query:
+    state: [Selangor, Perak]
+
+GET /wce/vehicle-classes
+  Usage: Vehicle class definitions for classes 1 through 5.
+  Alias: /wce/classes
+
+
+TBS - TERMINALS, INTERCITY BUSES, AND TRACKING
+
+TBS usage:
+  No caller authentication required; Worker handles ticketing handshakes.
+  Use /tbs/origins and /tbs/destinations for current terminal codes.
+  Legacy mobile schedules/tracking/promotions/diagnostics can return upstream
+  errors or timeouts. GoHub ticketing uses a separate upstream service.
+
+GET /tbs
+GET /tbs/help
+  Usage: TBS endpoint directory.
+
+GET /tbs/origins
+  Usage: List departure terminals supported by GoHub ticketing.
+
+GET /tbs/destinations
+  Usage: List reachable destinations for an origin, optionally filtered.
+  Query:
+    origin: <string> (default: TBS; alias: from; e.g. TBS, BTG, RAB, TBG)
+    search: <string> (destination keyword)
+    state: <string> (state filter)
+  Example: /tbs/destinations?origin=TBS&search=Melaka
+
+GET/POST /tbs/trips
+  Usage: Search trips, fares, and seat availability.
+  Query / Payload (JSON or form data; body values take precedence):
+    from: <string> (default: TBS; alias: origin)
+    to: <string> (required; destination code; alias: destination)
+    date: <date string> (default: today in Malaysia)
+    operator: <string> (operator name filter)
+    sort: [time, price, seats] (default: time)
+    order: [asc, desc] (default: asc)
+  Date formats: YYYY-MM-DD, DD/MM/YYYY, DD/MMM/YYYY, today, tomorrow.
+  Example: /tbs/trips?from=TBS&to=MEL&date=2026-10-26&sort=price&order=asc
+  Payload example:
+    {"from":"TBS","to":"MEL","date":"tomorrow","sort":"price","order":"asc"}
+
+GET/POST /tbs/seats
+  Usage: Live seat layout and occupancy for a selected trip.
+  Alias: /tbs/seat-layout
+  Query / Payload (JSON or form data; body values take precedence):
+    trip_key: <string> (required; from /tbs/trips; alias: trip_id)
+    trip_info_data: <string> (required; encrypted token from the same trip)
+  Payload example:
+    {"trip_key":"<trip_key from trips>","trip_info_data":"<trip_info_data from trips>"}
+  Usage sequence: Search /tbs/trips, select a trip, pass both returned fields.
+
+GET /tbs/terminal-info
+  Usage: Terminal metadata, transport connections, facilities, and contacts.
+  Alias: /tbs/info
+
+GET /tbs/arrivals
+  Usage: Live incoming bus arrivals.
+  Query:
+    operator: <string>
+    plate: <string>
+    search: <string>
+
+GET /tbs/departures
+  Usage: Live departures with gate assignments and status.
+  Query:
+    destination: <string>
+    operator: <string>
+    gate: <string>
+    status: <string>
+    search: <string>
+
+GET /tbs/bus-trail/:schid
+  Usage: Checkpoint/tracking history for a bus schedule.
+  Path:
+    schid: <string> (required; schedule ID)
+  Note: /tbs/bus-trail without an ID returns HTTP 400.
+
+GET /tbs/bus-location/:plateno
+  Usage: GPS coordinates for a vehicle plate number.
+  Path:
+    plateno: <string> (required)
+  Note: /tbs/bus-location without a plate number returns HTTP 400.
+
+GET /tbs/promotions
+  Usage: Active terminal promotional campaigns.
+  Alias: /tbs/promos
+
+GET /tbs/promotions/count
+  Usage: Count active campaigns.
+  Alias: /tbs/promos/count
+
+GET /tbs/promotions/status
+  Usage: Promotion/loyalty feature status.
+  Alias: /tbs/promos/status
+
+GET /tbs/diagnostics
+  Usage: Maintenance mode and minimum application-build metadata.
+  Alias: /tbs/status
+
+
+TUJU - HIGHWAYS, CCTV, REST AREAS, EV, AND ROUTE DATA
+
+TuJu authentication usage:
+  With Worker runtime credentials configured, call data endpoints directly.
+  Client credentials are not required in this current configuration.
+  Optional caller override: Authorization: Bearer <TuJu token>.
+  Obtain a caller token through POST /tuju/auth if needed; it is not persisted.
+  Bearer overrides apply to catalogues, CCTV directory, rest areas, route-data
+  endpoints, and search. Query-token authentication is not implemented for TuJu.
+  Camera images and route encode/resolve need no TuJu authentication.
+
+GET /tuju
+GET /tuju/help
+  Usage: TuJu endpoint directory and route-input help.
+
+GET /tuju/auth
+  Usage: Inspect whether Worker credentials are configured.
+
+POST /tuju/auth
+  Usage: Login with a TuJu account; returns caller token/session information.
+  Payload:
+    username: <string> (required; nonempty email/phone, maximum 320 characters)
+    password: <string> (required; nonempty, maximum 1024 characters)
+  Payload example:
+    {"username":"user@example.com","password":"<password>"}
+
+GET /tuju/highways
+  Usage: Highway directory; use each highway's value field as hway_code.
+
+GET /tuju/authorities
+  Usage: Highway authorities, concessionaires, and contact information.
+
+GET /tuju/cctv
+  Usage: Cameras for one highway, including local proxy image URLs.
+  Query:
+    hway_code: <string> (required; value from /tuju/highways, e.g. NKV, PLS, SPL, WCE)
+  Example: /tuju/cctv?hway_code=NKV
+
+GET /tuju/cctv/image
+  Usage: Public camera image proxy; usually JPEG, also accepts upstream PNG/WebP.
+  Query:
+    hway_code: <string> (required)
+    title: <string> (required; exact camera title from /tuju/cctv; maximum 512 chars)
+  Example: /tuju/cctv/image?hway_code=NKV&title=<URL-encoded-camera-title>
+  Note: Prefer using the image URL returned by the CCTV directory.
+
+GET /tuju/ev-stations
+  Usage: EV charging stations, connectors, operating status, and metadata.
+  Note: Upstream returns a capped list; reported total can exceed returned count.
+    No pagination query is implemented.
+
+GET /tuju/insurance-hotlines
+  Usage: Insurance assistance contacts.
+
+GET/POST /tuju/rsa/nearest
+  Usage: Nearest rest areas, lay-bys, and fuel stops with amenities/distances.
+  Query / Payload (JSON POST values take precedence):
+    lat: <decimal -90 to 90> (required; alias: latitude)
+    lng: <decimal -180 to 180> (required; alias: longitude)
+  Example: /tuju/rsa/nearest?lat=3.205&lng=101.575
+  Payload example:
+    {"lat":3.205,"lng":101.575}
+
+POST /tuju/highways/inroute
+  Usage: Find highways along the supplied/resolved route.
+  Payload: One route representation from TUJU SHARED ROUTE PAYLOAD below.
+  Payload example:
+    {"points":[{"lat":3.233,"lng":101.581},{"lat":3.223395,"lng":101.577242}]}
+  Response: Upstream JSON containing highways.
+
+POST /tuju/rsa/inroute
+  Usage: Find rest areas along the supplied/resolved route.
+  Payload: One route representation from TUJU SHARED ROUTE PAYLOAD below.
+  Payload example:
+    {"coordinates":[[3.233,101.581],[3.223395,101.577242]]}
+  Response: Upstream JSON containing rsas.
+
+POST /tuju/toll-rates
+  Usage: Retrieve TuJu toll rate and steps for the supplied/resolved route.
+  Payload: One route representation from TUJU SHARED ROUTE PAYLOAD below.
+  Payload example:
+    {"origin":{"lat":3.1344,"lng":101.6869},"destination":{"lat":3.205,"lng":101.575}}
+  Response: Upstream JSON containing rate (string) and steps (array).
+  Note: These three route-data endpoints convert the route automatically.
+    Populated matches and nonzero tolls remain unverified in the project findings.
+
+POST /tuju/route/encode
+  Usage: Preview route conversion to a precision-5 encoded polyline.
+  Payload: One route representation from TUJU SHARED ROUTE PAYLOAD below.
+  Response: status, encoded_polyline, precision, point_count, source; resolved
+    route metadata is also included when OSRM is used.
+  Note: Supplied map paths encode locally; origin/destination or resolver=osrm
+    resolves roads first. This endpoint does not call TuJu.
+
+POST /tuju/route/resolve
+  Usage: Calculate an OSRM road route and preview geometry and alternatives.
+  Payload: Origin/destination or ordered location-list input from the shared
+    payload below. Always resolves roads; do not send an already encoded route.
+  Payload example:
+    {"origin":{"lat":3.1344,"lng":101.6869},"destination":{"lat":3.205,"lng":101.575},"waypoints":[],"osrm":{"alternatives":true,"steps":true}}
+  Response: status, source, encoded_polyline, precision, point_count, geometry,
+    distance_meters, duration_seconds, route_index, routes, waypoints, legs,
+    weight, weight_name, attribution, optional data_version.
+  Note: No TuJu call. Geometry uses GeoJSON [longitude, latitude].
+
+GET /tuju/search
+  Usage: Place search through TuJu.
+  Query:
+    q: <string> (required; 2-256 characters after trimming)
+  Example: /tuju/search?q=KL%20Sentral
+
+
+TUJU SHARED ROUTE PAYLOAD
+
+Used by:
+  POST /tuju/highways/inroute
+  POST /tuju/rsa/inroute
+  POST /tuju/toll-rates
+  POST /tuju/route/encode
+  POST /tuju/route/resolve (location inputs only; always OSRM)
+
+Payload: Supply one route/location representation per JSON object:
+  coordinates: <array of [latitude, longitude] pairs>
+  points: <array of {lat,lng}, {lat,lon}, or {latitude,longitude} objects>
+  path: <ordered coordinate-pair or point-object array>
+  geometry: <GeoJSON LineString or Feature containing a LineString>
+  route: <selected map route, or Google/OSRM response containing routes>
+  encoded_polyline: <precision-5 encoded polyline string>
+  origin + destination: <coordinate objects/pairs> (required together if used)
+  from + to: <aliases for origin + destination>
+  waypoints: <intermediate location array with origin/destination, or standalone
+              ordered location array for OSRM resolution>
+
+Optional payload controls:
+  coordinate_order: [latlng, lnglat] (default: latlng for non-GeoJSON arrays)
+  geometry_format: [polyline, polyline6, geojson] (default: polyline; declare
+                    polyline6 for precision 6 strings)
+  geometries: <alias for geometry_format>
+  route_index: <nonnegative integer> (default: 0; selected alternative;
+                OSRM resolution accepts 0-3)
+  resolver: [osrm, none] (osrm resolves locations; none keeps a supplied path local)
+  osrm: <object> (routing options below)
+
+Coordinate behavior:
+  WGS84 geographic coordinates; latitude -90..90, longitude -180..180.
+  GeoJSON is always [longitude, latitude]. Other arrays default to [lat, lng].
+  Send ordered road-path points for local conversion; at least two required.
+  Origin/destination inputs automatically invoke OSRM with optional waypoints.
+  Add resolver=osrm to route coordinates/points/path as locations to visit.
+  For standalone waypoints, add resolver=osrm or use /tuju/route/resolve.
+  Do not combine precomputed map geometry with an OSRM location request.
+  Addresses and place IDs must first be converted to coordinates by the client.
+  Supported Google route data includes overview_path, overview_polyline,
+    polyline.encodedPolyline, and polyline.geoJsonLinestring.
+  A GeoJSON LineString/Feature may also be the complete body itself.
+
+Payload examples:
+  {"coordinates":[[3.233,101.581],[3.223395,101.577242],[3.213,101.571]]}
+  {"coordinate_order":"lnglat","coordinates":[[101.581,3.233],[101.577242,3.223395]]}
+  {"geometry":{"type":"LineString","coordinates":[[101.581,3.233],[101.577242,3.223395]]}}
+  {"encoded_polyline":"<existing precision-5 route>"}
+  {"route":{"geometry":"<precision-6 geometry>"},"geometry_format":"polyline6"}
+  {"resolver":"osrm","points":[{"lat":3.1344,"lng":101.6869},{"lat":3.205,"lng":101.575}],"osrm":{"steps":true}}
+
+OSRM options (inside payload.osrm):
+  profile: <string> (default: operator OSRM_PROFILE or driving)
+  alternatives: <boolean or integer 0-3>
+  steps: <boolean>
+  annotations: <boolean, CSV string, or array of nodes/distance/duration/
+                datasources/weight/speed>
+  exclude: <CSV string or array of profile-supported road classes>
+  continue_straight: <boolean or default>
+  snapping: [default, any]
+  geometries: [geojson, polyline, polyline6] (default: geojson)
+  radiuses: <one entry per location: nonnegative meters, unlimited, or null>
+  bearings: <one [bearing,range] pair per location, or null; integer bearing
+             0-360 and range 0-180>
+  approaches: <one curb/unrestricted/null entry per location>
+  hints: <one URL-safe base64 hint or null per location>
+  generate_hints: <boolean> (default: false)
+  skip_waypoints: <boolean>
+  waypoints: <increasing stop-location indices including first and last;
+              distinct from the top-level coordinate waypoints array>
+
+Limits and usage:
+  Local coordinate paths: up to 10,000 points.
+  Encoded strings: up to 100,000 characters.
+  OSRM requests: up to 100 input locations and 3 alternatives.
+  Resolved routes: up to 50,000 points and 100,000 encoded characters.
+  Road classes/profiles must be available on the operator's OSRM server.
+  The default resolver is the public Project OSRM demo unless configured by the
+    operator. Coordinates are sent to that server for road resolution.
+  Resolve once, draw the returned geometry, and reuse {"route": resolved.routes[0]}
+    for toll-rates, highways/inroute, and rsa/inroute to avoid repeat resolution.
+  Operator routing configuration is not accepted as a caller-supplied server URL.
+
+
+RETIRED OR RELOCATED PATHS (HTTP 404; DO NOT USE)
+
+  /rapidkl/stations -> /rapidkl/no-auth/stations
+  /rapidkl/fare -> /rapidkl/no-auth/fare
+  /rapidkl/geocode -> /rapidkl/no-auth/geocode
+  /rapidkl/journey -> /rapidkl/no-auth/journey
+  /rapidkl/announcements -> /rapidkl/no-auth/announcements
+  /rapidkl/rail-network -> /rapidkl/no-auth/rail-network
+  /rapidkl/tile... -> /rapidkl/no-auth/tile...
+  /rapidkl/data/bus_routes -> /rapidkl/no-auth/bus-routes
+  /rapidkl/data/transit_polylines -> /rapidkl/no-auth/transit-polylines
+  /rapidkl/data/transit_schematic_stations -> /rapidkl/no-auth/transit-schematic-stations
+  /rapidkl/data/ktmb_stations -> /ktmb/stations
+  /rapidkl/data and other /rapidkl/data/* -> use individual public data endpoints
+  /rapidkl_bus* -> consolidated /rapidkl/* endpoints
+  /ktmb/session -> /ktmb/generate-session
+  /ktmb/data and /ktmb/data/* -> /ktmb/stations
+
+
+REQUEST EXAMPLES
+
+GET with query:
+  curl "https://api.dani-dev.co.za/v2/transport/rapidkl/no-auth/fare?from=KJ1&to=KJ15"
+
+POST with JSON (POSIX shell quoting):
+  curl -X POST "https://api.dani-dev.co.za/v2/transport/wce/toll-rates" -H "Content-Type: application/json" -d '{"entry":"Banting","exit":"Ayer Hitam","class":1}'
+
+Authenticated GET:
+  curl "https://api.dani-dev.co.za/v2/transport/rapidkl/saved-routes" -H "Authorization: Bearer <PULSE token>"
+
+PowerShell JSON POST:
+  $body = @{ entry = 'Banting'; exit = 'Ayer Hitam'; class = 1 } | ConvertTo-Json
+  Invoke-RestMethod -Method Post -Uri 'https://api.dani-dev.co.za/v2/transport/wce/toll-rates' -ContentType 'application/json' -Body $body
